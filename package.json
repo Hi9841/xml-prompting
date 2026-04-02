@@ -1,13 +1,18 @@
 {
   "name": "xml-prompting",
-  "version": "1.0.0",
-  "description": "Transform your entire codebase into a highly structured, XML-formatted AI prompt.",
+  "version": "1.0.1",
+  "description": "CLI that bundles your codebase with an XML meta-prompt for AI planning (Claude, ChatGPT, etc.).",
   "main": "index.js",
   "bin": {
     "xml-prompting": "./index.js"
   },
+  "files": [
+    "index.js",
+    "templates"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js",
+    "prepack": "node -e \"require('fs').accessSync('templates/meta_prompt.xml')\""
   },
   "keywords": [
     "ai",
@@ -15,10 +20,24 @@
     "llm",
     "cli",
     "codebase",
-    "xml"
+    "xml",
+    "anthropic",
+    "claude",
+    "context"
   ],
-  "author": "Your Name",
+  "author": "Hi9841",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hi9841/xml-prompting.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Hi9841/xml-prompting/issues"
+  },
+  "homepage": "https://github.com/Hi9841/xml-prompting#readme",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "commander": "^11.1.0",
     "ignore": "^5.2.4",

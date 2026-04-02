@@ -77,22 +77,24 @@ function generatePrompt(objective, codebaseText) {
     process.exit(1);
   }
 
+  // Long context first, specific ask last — matches Anthropic long-context guidance
+  // (see .cursor/skills/anthropic-xml-prompting/reference.md).
   return `${metaPrompt}
-
-<user-objective>
-${objective}
-</user-objective>
 
 <codebase-context>
 ${codebaseText}
 </codebase-context>
+
+<user-objective>
+${objective}
+</user-objective>
 `;
 }
 
 program
   .name('xml-prompting')
   .description('Turn your codebase into a structured XML prompt for AI')
-  .version('1.0.0')
+  .version('1.0.1')
   .requiredOption('-d, --dir <path>', 'Path to the target project directory')
   .requiredOption('-o, --objective <text>', 'What do you want the AI to plan/architect?')
   .option('-f, --file <name>', 'Output file name', 'ai_architect_prompt.txt');
