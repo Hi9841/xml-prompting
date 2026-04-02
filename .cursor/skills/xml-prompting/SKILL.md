@@ -23,8 +23,10 @@ From the **target project root** (or pass `--dir`):
 npx xml-prompting@latest --dir . --objective "YOUR TASK IN PLAIN ENGLISH" -f prompt.txt
 ```
 
-- **`--mode ide` (default)** — path list + small pinned files (`package.json`, README, tsconfig, …). **Use this in IDEs.**
+- **`--mode ide` (default)** — path list + small pinned configs (root/`src` `package.json`, README with case fallbacks, tsconfig, Next/Vite). **Lockfiles are excluded by default** (use `--pin-lockfiles` only if you need them). **Use this in IDEs.**
 - **`--mode full`** — every text file inlined. Only for chat UIs **without** workspace access.
+
+Raw **`.txt` / XML** may show `&lt;` instead of `<` inside `system-instructions`; that is normal XML escaping—the tags are still `codebase-context` and `user-objective`.
 
 Global install: `npm i -g xml-prompting` then `xml-prompting --dir . --objective "..."`.
 

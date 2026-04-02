@@ -12,23 +12,26 @@ const IGNORE_EXTENSIONS = new Set([
   '.exe', '.dll', '.so', '.dylib', '.class'
 ]);
 
-/** Config files to inline (small); IDE agents still have full repo on disk. */
-const PINNED_RELATIVE = [
-  'package.json',
-  'package-lock.json',
-  'pnpm-lock.yaml',
-  'yarn.lock',
-  'README.md',
-  'README.mdx',
-  'tsconfig.json',
-  'next.config.js',
-  'next.config.mjs',
-  'next.config.ts',
-  'vite.config.ts',
-  'vite.config.js'
+/**
+ * Pinned groups: first existing path in each group wins (root vs src/, README casing).
+ * Lockfiles omitted by default — they are huge and low-signal when the agent has the repo.
+ */
+const PINNED_GROUPS_BASE = [
+  ['package.json'],
+  ['src/package.json'],
+  ['README.md', 'README.MD', 'readme.md', 'Readme.md', 'README.mdx'],
+  ['tsconfig.json', 'src/tsconfig.json'],
+  ['next.config.ts', 'src/next.config.ts'],
+  ['next.config.js', 'src/next.config.js'],
+  ['next.config.mjs'],
+  ['vite.config.ts', 'vite.config.js']
 ];
 
+const PINNED_GROUPS_LOCKFILES = [['package-lock.json'], ['pnpm-lock.yaml'], ['yarn.lock']];
+
 const MAX_PINNED_CHARS = 24 * 1024;
+const MAX_PINNED_README_CHARS = 16 * 1024;
+const MAX_PINNED_LOCKFILE_CHARS = 12 * 1024;
 
 function loadGitignore(baseDir) {
   const ig = ignore();
@@ -116,27 +119,50 @@ function collectInventoryPaths(baseDir, ig, acc) {
   walkDir(baseDir);
 }
 
-function readPinnedFiles(baseDir, ig) {
+function isLockfileRel(rel) {
+  const base = path.basename(rel).toLowerCase();
+  return (
+    base === 'package-lock.json' ||
+    base === 'pnpm-lock.yaml' ||
+    base === 'yarn.lock' ||
+    base === 'npm-shrinkwrap.json'
+  );
+}
+
+function readPinnedFiles(baseDir, ig, includeLockfiles) {
+  const groups = includeLockfiles ? [...PINNED_GROUPS_BASE, ...PINNED_GROUPS_LOCKFILES] : [...PINNED_GROUPS_BASE];
   const out = [];
-  const seen = new Set();
+  const seenRel = new Set();
 
-  for (const rel of PINNED_RELATIVE) {
-    if (seen.has(rel)) continue;
-    seen.add(rel);
+  for (const candidates of groups) {
+    for (const rel of candidates) {
+      if (seenRel.has(rel)) continue;
 
-    const full = path.join(baseDir, rel);
-    if (!fs.existsSync(full)) continue;
-    if (!fs.statSync(full).isFile()) continue;
-    if (ig.ignores(rel)) continue;
+      const full = path.join(baseDir, rel);
+      if (!fs.existsSync(full)) continue;
+      if (!fs.statSync(full).isFile()) continue;
+      if (ig.ignores(rel)) continue;
 
-    try {
-      let text = fs.readFileSync(full, 'utf8');
-      if (text.length > MAX_PINNED_CHARS) {
-        text = text.slice(0, MAX_PINNED_CHARS) + '\n\n... [truncated by xml-prompting] ...\n';
+      try {
+        let text = fs.readFileSync(full, 'utf8');
+        if (!text.trim()) continue;
+
+        let max = MAX_PINNED_CHARS;
+        if (/readme/i.test(path.basename(rel))) {
+          max = MAX_PINNED_README_CHARS;
+        } else if (isLockfileRel(rel)) {
+          max = MAX_PINNED_LOCKFILE_CHARS;
+        }
+
+        if (text.length > max) {
+          text = text.slice(0, max) + '\n\n... [truncated by xml-prompting] ...\n';
+        }
+        out.push({ rel: normalizeRel(rel), text: escapeCdataBody(text) });
+        seenRel.add(rel);
+        break;
+      } catch {
+        console.log(pc.yellow(`Skipping pinned file: ${rel}`));
       }
-      out.push({ rel, text: escapeCdataBody(text) });
-    } catch {
-      console.log(pc.yellow(`Skipping pinned file: ${rel}`));
     }
   }
 
@@ -147,19 +173,19 @@ function readPinnedFiles(baseDir, ig) {
  * Inventory + optional config snippets — for Claude Code, Cursor, Antigravity, etc.
  * The agent already has the workspace; do not paste every file.
  */
-function scanCodebaseIde(baseDir) {
+function scanCodebaseIde(baseDir, includeLockfiles) {
   const ig = loadGitignore(baseDir);
   const paths = [];
   collectInventoryPaths(baseDir, ig, paths);
   paths.sort((a, b) => a.localeCompare(b));
 
   const root = path.resolve(baseDir);
-  const pinned = readPinnedFiles(baseDir, ig);
+  const pinned = readPinnedFiles(baseDir, ig, includeLockfiles);
 
   console.log(pc.cyan(`\nScanning codebase at: ${root} (mode: ide — ${paths.length} paths, ${pinned.length} pinned snippets)`));
 
   let xml = `  <agent-environment>
-    <note>You are running in an IDE or agent harness with the repository on disk (Claude Code, Cursor, Antigravity, etc.). Use your file tools to read and change sources. This block is a path inventory, not a full code dump.</note>
+    <note><![CDATA[You are running in an IDE or agent harness with the repository on disk (Claude Code, Cursor, Antigravity, etc.). Use your file tools to read and change sources. This block is a path inventory, not a full code dump. In the system-instructions section, tag names may appear with XML escapes (e.g. &lt;codebase-context&gt;); that still means the codebase-context and user-objective elements.]]></note>
     <repository-root>${escapeXml(root)}</repository-root>
     <scanned-file-count>${paths.length}</scanned-file-count>
   </agent-environment>
@@ -222,14 +248,20 @@ program
       .choices(['ide', 'full'])
       .default('ide')
   )
-  .option('-f, --file <name>', 'Output file name', 'ai_architect_prompt.txt');
+  .option('-f, --file <name>', 'Output file name', 'ai_architect_prompt.txt')
+  .option(
+    '--pin-lockfiles',
+    'IDE mode: include lockfiles in pinned snippets (large; default off)'
+  );
 
 program.parse();
 const options = program.opts();
 
 try {
   const codebaseText =
-    options.mode === 'full' ? scanCodebaseFull(options.dir) : scanCodebaseIde(options.dir);
+    options.mode === 'full'
+      ? scanCodebaseFull(options.dir)
+      : scanCodebaseIde(options.dir, Boolean(options.pinLockfiles));
 
   const finalPrompt = generatePrompt(options.objective, codebaseText, options.mode);
 

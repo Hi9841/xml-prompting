@@ -12,7 +12,7 @@ A small **Node.js CLI** that emits a structured **XML prompt**: the meta templat
 
 | Mode | Use when | `<codebase-context>` contains |
 |------|-----------|------------------------------|
-| **`ide` (default)** | Agent runs in the repo with file tools | Path inventory + optional small “pinned” files (`package.json`, `README.md`, `tsconfig.json`, …) |
+| **`ide` (default)** | Agent runs in the repo with file tools | Path inventory + small **pinned** configs (root + `src/package.json` when present, README with case variants, tsconfig, Next/Vite config). **Lockfiles are not pinned** unless you pass `--pin-lockfiles`. |
 | **`full`** | Chat UI with **no** repo access | Every text file’s contents (can be **very** large) |
 
 ## Requirements
@@ -62,6 +62,7 @@ For **`--mode full`**, raw source may contain `<` and break strict XML; in this 
 | `-o, --objective <text>` | **Required.** What to plan. |
 | `-m, --mode ide\|full` | **`ide`** default; **`full`** inlines all files. |
 | `-f, --file <name>` | Output path (default: `ai_architect_prompt.txt`). |
+| `--pin-lockfiles` | **IDE only:** include lockfiles in pinned snippets (large; **off** by default). |
 
 ## License
 
