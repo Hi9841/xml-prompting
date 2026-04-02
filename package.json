@@ -1,0 +1,27 @@
+{
+  "name": "xml-prompting",
+  "version": "1.0.0",
+  "description": "Transform your entire codebase into a highly structured, XML-formatted AI prompt.",
+  "main": "index.js",
+  "bin": {
+    "xml-prompting": "./index.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "ai",
+    "prompt",
+    "llm",
+    "cli",
+    "codebase",
+    "xml"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^11.1.0",
+    "ignore": "^5.2.4",
+    "picocolors": "^1.0.0"
+  }
+}
