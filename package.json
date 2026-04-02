@@ -1,6 +1,6 @@
 {
   "name": "xml-prompting",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "CLI that bundles your codebase with an XML meta-prompt for AI planning (Claude, ChatGPT, etc.).",
   "main": "index.js",
   "bin": {
@@ -8,7 +8,8 @@
   },
   "files": [
     "index.js",
-    "templates"
+    "templates",
+    "LICENSE"
   ],
   "scripts": {
     "start": "node index.js",
@@ -26,7 +27,7 @@
     "context"
   ],
   "author": "Hi9841",
-  "license": "MIT",
+  "license": "UNLICENSED",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Hi9841/xml-prompting.git"

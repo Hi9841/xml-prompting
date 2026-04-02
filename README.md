@@ -65,4 +65,6 @@ For **`--mode full`**, raw source may contain `<` and break strict XML; in this 
 
 ## License
 
-MIT
+**Proprietary — all rights reserved.** Commercial use, redistribution for sale, or incorporation into paid products is **not** allowed without written permission from the author. See [LICENSE](LICENSE). (`package.json` uses `UNLICENSED` to reflect that this is not open source.)
+
+For permission requests, open a discussion or contact the repo owner on GitHub.
