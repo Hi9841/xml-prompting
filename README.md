@@ -1,6 +1,6 @@
 # xml-prompting
 
-based on https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices#structure-prompts-with-xml-tags
+based on [Anthropic XML Prompting](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices#structure-prompts-with-xml-tags)
 
 A small **Node.js CLI** that scans a project directory (respecting `.gitignore`), wraps the result in **`templates/meta_prompt.xml`**, and writes a single text file you can paste into any AI to get back a structured **XML implementation spec**.
 
