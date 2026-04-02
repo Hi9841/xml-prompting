@@ -4,6 +4,8 @@ based on [Anthropic XML Prompting](https://platform.claude.com/docs/en/build-wit
 
 A small **Node.js CLI** that emits a structured **XML prompt**: the meta template in `templates/meta_prompt.xml`, a `<codebase-context>` block, and your `<user-objective>`.
 
+**Cursor skill:** `.cursor/skills/xml-prompting/` — tells the agent how to run the CLI, use **ide** vs **full** mode, and interpret pasted output (committed so clones and contributors get it).
+
 ## Why two modes?
 
 **IDE agents** (Claude Code, Cursor, Antigravity, etc.) **already have the project on disk**. Pasting the entire repo (tens of thousands of lines) is redundant and wastes context.

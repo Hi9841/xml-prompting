@@ -1,5 +1,5 @@
-# Cursor (local only; do not commit)
-.cursor/
+# Cursor — shared skills live in .cursor/skills/ (committed). Ignore local-only noise.
+.cursor/chat/
 
 # Dependencies
 node_modules/
