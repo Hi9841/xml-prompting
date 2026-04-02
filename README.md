@@ -64,14 +64,6 @@ Feed that file to your model of choice.
 | `-o, --objective <text>` | **Required.** What you want planned or specified. |
 | `-f, --file <name>` | Output filename (default: `ai_architect_prompt.txt`). |
 
-## Publishing (maintainers)
-
-1. Log in: `npm login`
-2. Bump version in `package.json` if needed.
-3. Publish: `npm publish --access public`
-
-Scoped package (if the name `xml-prompting` is taken on npm): rename to `@your-scope/xml-prompting` in `package.json` and publish with `npm publish --access public`.
-
 ## License
 
 MIT
