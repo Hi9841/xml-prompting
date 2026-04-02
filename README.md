@@ -2,30 +2,39 @@
 
 based on [Anthropic XML Prompting](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices#structure-prompts-with-xml-tags)
 
-A small **Node.js CLI** that scans a project directory (respecting `.gitignore`), wraps the result in **`templates/meta_prompt.xml`**, and writes a single text file you can paste into any AI to get back a structured **XML implementation spec**.
+A small **Node.js CLI** that emits a structured **XML prompt**: the meta template in `templates/meta_prompt.xml`, a `<codebase-context>` block, and your `<user-objective>`.
+
+## Why two modes?
+
+**IDE agents** (Claude Code, Cursor, Antigravity, etc.) **already have the project on disk**. Pasting the entire repo (tens of thousands of lines) is redundant and wastes context.
+
+| Mode | Use when | `<codebase-context>` contains |
+|------|-----------|------------------------------|
+| **`ide` (default)** | Agent runs in the repo with file tools | Path inventory + optional small “pinned” files (`package.json`, `README.md`, `tsconfig.json`, …) |
+| **`full`** | Chat UI with **no** repo access | Every text file’s contents (can be **very** large) |
 
 ## Requirements
 
 - [Node.js](https://nodejs.org/) **18+**
 
-## Use without installing (`npx`)
+## `npx` (recommended)
 
-From any directory:
+**IDE / agent (default):**
 
 ```bash
-npx xml-prompting --dir path/to/your-project --objective "Describe what you want the AI to plan"
+npx xml-prompting --dir path/to/your-project --objective "Plan session-based auth refactor"
 ```
 
-Example using the current folder:
+**Full inline dump** (legacy / web-only workflows):
 
 ```bash
-npx xml-prompting --dir . --objective "Add dark mode to the settings page"
+npx xml-prompting --dir path/to/your-project --objective "..." --mode full
 ```
 
-Optional: write to a specific file (default: `ai_architect_prompt.txt`):
+Optional output path:
 
 ```bash
-npx xml-prompting --dir . --objective "Refactor auth to sessions" -f prompt.txt
+npx xml-prompting --dir . --objective "Add dark mode" -f prompt.txt
 ```
 
 ## Install globally
@@ -35,34 +44,22 @@ npm install -g xml-prompting
 xml-prompting --dir . --objective "Your objective here"
 ```
 
-## Use from a clone (contributors)
+## Output layout
 
-```bash
-git clone https://github.com/Hi9841/xml-prompting.git
-cd xml-prompting
-npm install
-node index.js --dir ../my-app --objective "Plan feature X"
-# or
-npm start -- --dir ../my-app --objective "Plan feature X"
-```
+1. `<system-instructions>` from `templates/meta_prompt.xml` (role, output schema).
+2. `<codebase-context mode="ide"|"full">` — inventory (+ pins) or full file bodies.
+3. `<user-objective>` last.
 
-## What gets generated
-
-The output file contains:
-
-1. The **meta prompt** from `templates/meta_prompt.xml` (role, directives, expected output schema; aligned with [Anthropic prompt engineering](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview) ideas like XML structure and clear constraints).
-2. A **`<codebase-context>`** block with file paths and contents (binaries and large media types are skipped).
-3. Your **`<user-objective>`** text **last** (long context before the specific ask, per Anthropic long-context guidance).
-
-Feed that file to your model of choice.
+For **`--mode full`**, raw source may contain `<` and break strict XML; in this repo you can run `node scripts/wrap-codebase-cdata.js path/to/output.txt` to wrap the codebase section in CDATA.
 
 ## Options
 
 | Option | Description |
 |--------|-------------|
-| `-d, --dir <path>` | **Required.** Project root to scan. |
-| `-o, --objective <text>` | **Required.** What you want planned or specified. |
-| `-f, --file <name>` | Output filename (default: `ai_architect_prompt.txt`). |
+| `-d, --dir <path>` | **Required.** Project root. |
+| `-o, --objective <text>` | **Required.** What to plan. |
+| `-m, --mode ide\|full` | **`ide`** default; **`full`** inlines all files. |
+| `-f, --file <name>` | Output path (default: `ai_architect_prompt.txt`). |
 
 ## License
 
