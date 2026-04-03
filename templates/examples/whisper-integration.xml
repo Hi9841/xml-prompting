@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- This is a reference example — not an executable prompt.
+     Generated with xml-prompting v1.5.0.
+     It demonstrates all new schema sections: provided-code, do-not,
+     acceptance-criteria, principle IDs, and depends-on step attributes. -->
+
+<upgrade-audio-to-whisper>
+
+  <objective>
+    Replace the browser-native Web Speech API transcription with OpenAI Whisper
+    (via the /v1/audio/transcriptions endpoint) for all audio recording and
+    transcription features in the application. The new implementation must support
+    streaming blob upload, return word-level timestamps, and degrade gracefully
+    when the Whisper API is unavailable.
+  </objective>
+
+  <platform>
+    <stack>Next.js 14 App Router, TypeScript, React 18, Tailwind CSS</stack>
+    <architecture-patterns>Server Components for data fetching, Client Components for audio capture, API routes for Whisper proxy</architecture-patterns>
+  </platform>
+
+  <current-state>
+    The app uses the browser's built-in SpeechRecognition API (Web Speech API)
+    in src/hooks/useVoiceRecorder.ts. This approach has three known problems:
+    (1) only works in Chrome/Edge; (2) no word-level timestamps; (3) accuracy
+    is poor for non-English input. The current API surface is:
+    startRecording() → stopRecording() → transcript: string.
+    No server-side audio processing exists today.
+  </current-state>
+
+  <!-- PROVIDED-CODE: user-supplied integration snippets that MUST be used verbatim -->
+  <provided-code>
+    <snippet lang="ts" id="whisper-client">
+<![CDATA[
+// src/lib/whisper.ts — provided by user; use verbatim
+import OpenAI from 'openai';
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+export async function transcribeAudio(blob: Blob): Promise<{
+  text: string;
+  words: { word: string; start: number; end: number }[];
+}> {
+  const file = new File([blob], 'audio.webm', { type: blob.type });
+  const response = await openai.audio.transcriptions.create({
+    file,
+    model: 'whisper-1',
+    response_format: 'verbose_json',
+    timestamp_granularities: ['word'],
+  });
+  return { text: response.text, words: response.words ?? [] };
+}
+]]>
+    </snippet>
+
+    <snippet lang="ts" id="api-route-stub">
+<![CDATA[
+// src/app/api/transcribe/route.ts — provided by user; use verbatim
+import { NextRequest, NextResponse } from 'next/server';
+import { transcribeAudio } from '@/lib/whisper';
+import { auth } from '@/lib/auth';
+
+export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const formData = await req.formData();
+  const blob = formData.get('audio') as Blob;
+  if (!blob) return NextResponse.json({ error: 'No audio provided' }, { status: 400 });
+
+  const result = await transcribeAudio(blob);
+  return NextResponse.json(result);
+}
+]]>
+    </snippet>
+  </provided-code>
+
+  <files>
+    <create path="src/lib/whisper.ts" priority="1" purpose="Whisper API client — use snippet id='whisper-client' verbatim">
+    </create>
+    <create path="src/app/api/transcribe/route.ts" priority="2" purpose="Authenticated Next.js API route for audio upload — use snippet id='api-route-stub' verbatim">
+    </create>
+    <modify path="src/hooks/useVoiceRecorder.ts" priority="3" purpose="Replace SpeechRecognition with MediaRecorder + fetch to /api/transcribe; expose words[] alongside transcript string">
+    </modify>
+    <modify path="src/components/VoiceButton.tsx" priority="4" purpose="Wire updated useVoiceRecorder hook; show word-level highlight when words[] available">
+    </modify>
+    <delete path="src/lib/speechRecognition.ts">No longer needed — Web Speech API wrapper replaced by Whisper client</delete>
+  </files>
+
+  <feature-inventory>
+    - Whisper API client (src/lib/whisper.ts) — verbatim from provided-code snippet
+    - Authenticated /api/transcribe POST route with 401 guard
+    - Updated useVoiceRecorder hook: MediaRecorder → blob → Whisper → { transcript, words }
+    - Word-level timestamp passthrough to VoiceButton component
+    - Graceful degradation: if Whisper API call fails, return empty words and surface error message
+    - Removal of legacy Web Speech API wrapper
+  </feature-inventory>
+
+  <flow-design>
+    <principles>
+      <principle id="verbatim-snippets">
+        The two provided-code snippets (whisper-client, api-route-stub) are used
+        verbatim. Do not rewrite, rename, or restructure them. They represent the
+        exact interface the rest of the codebase will consume.
+      </principle>
+      <principle id="auth-first">
+        Every server-side audio path must authenticate before processing. The
+        api-route-stub already implements this via auth(); never bypass it.
+      </principle>
+      <principle id="graceful-degradation">
+        If the Whisper call throws, catch the error, log it server-side, and return
+        a 503 with a user-friendly message. The client hook must handle 503 without
+        crashing the UI.
+      </principle>
+    </principles>
+    <steps>
+      1. Create src/lib/whisper.ts from snippet whisper-client (verbatim).
+      2. Create src/app/api/transcribe/route.ts from snippet api-route-stub (verbatim).
+      3. Refactor useVoiceRecorder.ts: swap SpeechRecognition for MediaRecorder,
+         POST blob to /api/transcribe, expose { transcript, words } state.
+      4. Update VoiceButton.tsx to consume the new hook shape and render word highlights.
+      5. Delete src/lib/speechRecognition.ts.
+      6. Run full test suite; fix TypeScript errors.
+    </steps>
+  </flow-design>
+
+  <technical-requirements>
+    <state-management>
+      useVoiceRecorder must expose: isRecording: boolean, transcript: string,
+      words: { word: string; start: number; end: number }[], error: string | null.
+      State resets on startRecording().
+    </state-management>
+    <data-flow>
+      User clicks record → MediaRecorder collects chunks → stopRecording() blobs chunks
+      → POST FormData to /api/transcribe → Whisper response → hook state updated
+      → VoiceButton re-renders with transcript + word highlights.
+    </data-flow>
+    <edge-cases>
+      - Empty recording (user stops immediately): return empty transcript, empty words[].
+      - Whisper API rate-limit (429): surface "Too many requests — try again shortly."
+      - Network offline: surface "No network connection."
+      - Audio codec unsupported by Whisper: convert to audio/wav via AudioContext before upload.
+    </edge-cases>
+    <security>
+      - OPENAI_API_KEY must never be exposed to the client. It lives only in .env.local
+        and is accessed exclusively in src/lib/whisper.ts (server-only).
+      - The /api/transcribe route enforces auth() — unauthenticated requests get 401.
+      - FormData size limit: enforce 10 MB max in the route handler.
+    </security>
+  </technical-requirements>
+
+  <do-not>
+    <rule>Do NOT call the Whisper API from client-side code — always proxy through /api/transcribe.</rule>
+    <rule>Do NOT modify the existing auth() implementation in src/lib/auth.ts.</rule>
+    <rule>Do NOT change the external interface of VoiceButton.tsx props — only internal wiring changes.</rule>
+    <rule>Do NOT add new npm dependencies beyond the already-installed openai package.</rule>
+    <rule>Do NOT keep any import of SpeechRecognition or webkitSpeechRecognition after migration.</rule>
+    <rule>Do NOT expose OPENAI_API_KEY in any client bundle or API response.</rule>
+  </do-not>
+
+  <acceptance-criteria>
+    <check id="1">npm run build completes with zero TypeScript errors.</check>
+    <check id="2">POST /api/transcribe with a valid audio blob and valid session returns 200 with { text, words }.</check>
+    <check id="3">POST /api/transcribe without a session returns 401.</check>
+    <check id="4">useVoiceRecorder.words is non-empty after a successful recording of spoken English.</check>
+    <check id="5">No reference to SpeechRecognition or webkitSpeechRecognition remains in the codebase (grep check).</check>
+    <check id="6">src/lib/speechRecognition.ts no longer exists.</check>
+    <check id="7">When Whisper API returns 503, the UI shows an error message without crashing.</check>
+  </acceptance-criteria>
+
+  <implementation-instructions>
+    <step number="1">
+      Create src/lib/whisper.ts using snippet id="whisper-client" verbatim.
+      Verify: file exists, content matches snippet exactly.
+    </step>
+    <step number="2" depends-on="1">
+      Create src/app/api/transcribe/route.ts using snippet id="api-route-stub" verbatim.
+      Verify: file exists, imports from @/lib/whisper.
+    </step>
+    <step number="3" depends-on="1,2">
+      Refactor src/hooks/useVoiceRecorder.ts.
+      Remove all SpeechRecognition usage. Add MediaRecorder-based recording.
+      Add fetch call to /api/transcribe. Expose { transcript, words, isRecording, error }.
+    </step>
+    <step number="4" depends-on="3">
+      Update src/components/VoiceButton.tsx to consume the new hook shape.
+      Render word-level highlights when words[] is non-empty.
+    </step>
+    <step number="5" depends-on="3">
+      Delete src/lib/speechRecognition.ts.
+    </step>
+    <step number="6" depends-on="3,4,5">
+      Run: npm run build. Fix any TypeScript errors. Run: npm test. Fix failures.
+      Verify acceptance criteria 1–7.
+    </step>
+  </implementation-instructions>
+
+</upgrade-audio-to-whisper>

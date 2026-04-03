@@ -1,6 +1,6 @@
 {
   "name": "xml-prompting",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "CLI that bundles your codebase with an XML meta-prompt for AI planning (Claude, ChatGPT, etc.).",
   "main": "index.js",
   "bin": {
@@ -13,7 +13,8 @@
   ],
   "scripts": {
     "start": "node index.js",
-    "prepack": "node -e \"require('fs').accessSync('templates/meta_prompt.xml')\""
+    "prepack": "node -e \"require('fs').accessSync('templates/meta_prompt.xml')\"",
+    "validate": "node scripts/validate-prompt.js"
   },
   "keywords": [
     "ai",

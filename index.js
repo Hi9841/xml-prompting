@@ -24,14 +24,45 @@ const PINNED_GROUPS_BASE = [
   ['next.config.ts', 'src/next.config.ts'],
   ['next.config.js', 'src/next.config.js'],
   ['next.config.mjs'],
-  ['vite.config.ts', 'vite.config.js']
+  ['vite.config.ts', 'vite.config.js'],
+  // Remix
+  ['remix.config.js', 'remix.config.ts'],
+  // Astro
+  ['astro.config.mjs', 'astro.config.ts'],
+  // SvelteKit
+  ['svelte.config.js'],
+  // Nuxt
+  ['nuxt.config.ts', 'nuxt.config.js'],
+  // Testing
+  ['jest.config.ts', 'jest.config.js', 'jest.config.mjs'],
+  ['vitest.config.ts', 'vitest.config.js'],
+  // Env example (never .env itself)
+  ['.env.example']
 ];
 
 const PINNED_GROUPS_LOCKFILES = [['package-lock.json'], ['pnpm-lock.yaml'], ['yarn.lock']];
 
+const PINNED_GROUPS_PYTHON = [['settings.py'], ['pyproject.toml'], ['requirements.txt']];
+
 const MAX_PINNED_CHARS = 24 * 1024;
 const MAX_PINNED_README_CHARS = 16 * 1024;
 const MAX_PINNED_LOCKFILE_CHARS = 12 * 1024;
+const MAX_PINNED_PYTHON_CHARS = 8 * 1024;
+
+function getRoleAnnotation(relPath) {
+  const lower = relPath.toLowerCase();
+  const base = path.basename(lower);
+  if (lower.includes('/api/') && (base.startsWith('route.'))) return ' [route]';
+  if (lower.includes('/components/')) return ' [component]';
+  if (lower.includes('/hooks/')) return ' [hook]';
+  if (lower.includes('/lib/') || lower.includes('/utils/') || lower.includes('/helpers/')) return ' [util]';
+  if (/\.config\./.test(base)) return ' [config]';
+  if (/\.(test|spec)\./.test(base)) return ' [test]';
+  if (lower.includes('/types/') || base.endsWith('.d.ts')) return ' [types]';
+  if (lower.includes('/scripts/')) return ' [script]';
+  if (lower.includes('/migrations/')) return ' [migration]';
+  return '';
+}
 
 function loadGitignore(baseDir) {
   const ig = ignore();
@@ -129,8 +160,15 @@ function isLockfileRel(rel) {
   );
 }
 
+function isPythonRel(rel) {
+  const base = path.basename(rel).toLowerCase();
+  return base === 'settings.py' || base === 'pyproject.toml' || base === 'requirements.txt';
+}
+
 function readPinnedFiles(baseDir, ig, includeLockfiles) {
-  const groups = includeLockfiles ? [...PINNED_GROUPS_BASE, ...PINNED_GROUPS_LOCKFILES] : [...PINNED_GROUPS_BASE];
+  const groups = includeLockfiles
+    ? [...PINNED_GROUPS_BASE, ...PINNED_GROUPS_LOCKFILES, ...PINNED_GROUPS_PYTHON]
+    : [...PINNED_GROUPS_BASE, ...PINNED_GROUPS_PYTHON];
   const out = [];
   const seenRel = new Set();
 
@@ -152,10 +190,14 @@ function readPinnedFiles(baseDir, ig, includeLockfiles) {
           max = MAX_PINNED_README_CHARS;
         } else if (isLockfileRel(rel)) {
           max = MAX_PINNED_LOCKFILE_CHARS;
+        } else if (isPythonRel(rel)) {
+          max = MAX_PINNED_PYTHON_CHARS;
         }
 
         if (text.length > max) {
-          text = text.slice(0, max) + '\n\n... [truncated by xml-prompting] ...\n';
+          const originalKB = (text.length / 1024).toFixed(1);
+          const capKB = (max / 1024).toFixed(1);
+          text = text.slice(0, max) + `\n\n<!-- [TRUNCATED: original file is ${originalKB} KB, capped at ${capKB} KB] -->\n`;
         }
         out.push({ rel: normalizeRel(rel), text: escapeCdataBody(text) });
         seenRel.add(rel);
@@ -193,7 +235,7 @@ function scanCodebaseIde(baseDir, includeLockfiles) {
 `;
 
   for (const p of paths) {
-    xml += `    <path>${escapeXml(p)}</path>\n`;
+    xml += `    <path>${escapeXml(p)}${getRoleAnnotation(p)}</path>\n`;
   }
 
   xml += '  </file-inventory>\n';
@@ -242,7 +284,8 @@ program
   .description('Build an XML-structured prompt for AI (IDE agents or full repo paste)')
   .version(pkgVersion)
   .requiredOption('-d, --dir <path>', 'Path to the target project directory')
-  .requiredOption('-o, --objective <text>', 'What you want the AI to plan or architect')
+  .option('-o, --objective <text>', 'What you want the AI to plan or architect')
+  .option('--objective-file <path>', 'Read objective text from a file instead of --objective (supports multi-line, max 64 KB)')
   .addOption(
     new Option('-m, --mode <mode>', 'ide = file list + config pins for IDE agents (default); full = inline every file (huge)')
       .choices(['ide', 'full'])
@@ -258,12 +301,31 @@ program.parse();
 const options = program.opts();
 
 try {
+  // Resolve objective from --objective or --objective-file
+  let resolvedObjective = options.objective || '';
+  if (options.objectiveFile) {
+    const MAX_OBJ_FILE = 64 * 1024;
+    const raw = fs.readFileSync(options.objectiveFile, 'utf-8').replace(/\r\n/g, '\n');
+    if (raw.length > MAX_OBJ_FILE) {
+      console.error(pc.red(`Error: --objective-file exceeds 64 KB limit.`));
+      process.exitCode = 1;
+      process.exit();
+    }
+    // If the file starts with <objective>, use verbatim; otherwise wrap it
+    resolvedObjective = raw.trimStart().startsWith('<objective>') ? raw : `<objective>\n${raw.trim()}\n</objective>`;
+  }
+  if (!resolvedObjective) {
+    console.error(pc.red('Error: either --objective or --objective-file is required.'));
+    process.exitCode = 1;
+    process.exit();
+  }
+
   const codebaseText =
     options.mode === 'full'
       ? scanCodebaseFull(options.dir)
       : scanCodebaseIde(options.dir, Boolean(options.pinLockfiles));
 
-  const finalPrompt = generatePrompt(options.objective, codebaseText, options.mode);
+  const finalPrompt = generatePrompt(resolvedObjective, codebaseText, options.mode);
 
   fs.writeFileSync(options.file, finalPrompt, 'utf-8');
 

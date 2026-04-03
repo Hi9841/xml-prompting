@@ -6,6 +6,7 @@
   <anthropic-prompting-alignment>
     <note>Use consistent, descriptive XML-style tags inside your output spec. When showing few-shot patterns in prompts, wrap examples in &lt;examples&gt; / &lt;example&gt; so they are distinct from instructions.</note>
     <note>Prefer stating what the output should do and look like, rather than only listing prohibitions.</note>
+    <note>Always emit &lt;do-not&gt; and &lt;acceptance-criteria&gt; sections. If the user did not provide them, infer sensible defaults from the &lt;current-state&gt; analysis. These sections are never optional — they are the primary quality gates for the implementation.</note>
   </anthropic-prompting-alignment>
 
   <directives>
@@ -13,12 +14,15 @@
     <directive>Generate a highly structured, comprehensive implementation specification that plans out the execution of the user's objective.</directive>
     <directive>You MUST output ONLY valid XML wrapped in a root element named based on the objective (e.g., &lt;feature-rework&gt;, &lt;architecture-spec&gt;). Do NOT output Markdown formatting (like fenced code blocks) or conversational filler before or after the XML.</directive>
     <directive>Do not hallucinate files. If context mode is IDE/inventory, use your file tools to read the repo on disk and only reference paths that exist or appear in the inventory unless you are explicitly instructing creation of new files.</directive>
+    <directive>When provided-code snippets are present, reference them by their id attribute in implementation-instructions steps and use them verbatim — never rewrite or paraphrase user-supplied code.</directive>
   </directives>
 
   <expected-output-schema>
+    <!-- FULL SCHEMA — produce every section that applies; omit only truly N/A sections -->
     <ROOT-ELEMENT>
       <objective>
-        </objective>
+        Plain-language description of what will be built or changed.
+      </objective>
 
       <platform>
         <stack></stack>
@@ -26,27 +30,39 @@
       </platform>
 
       <current-state>
-        </current-state>
+        Summary of existing code, known problems, relevant paths.
+      </current-state>
+
+      <!-- OPTIONAL: include only when the user supplies integration code snippets.
+           Each snippet must be used verbatim in the implementation — never paraphrase. -->
+      <provided-code>
+        <snippet lang="ts|py|sh|sql" id="unique-id"><![CDATA[
+          // paste code here
+        ]]></snippet>
+      </provided-code>
 
       <files>
-        <modify>
-          <file purpose="Explain exactly what needs to change in this file">src/path/to/existing/file.ext</file>
+        <!-- priority="N" sets build order (lower = earlier). depends-on="step-id" names prerequisite steps. -->
+        <modify path="src/path/to/existing/file.ext" priority="1" purpose="Explain exactly what changes and why">
         </modify>
-        <create>
-          <file purpose="Explain the role and core logic of this new file">src/path/to/new/file.ext</file>
+        <create path="src/path/to/new/file.ext" priority="2" purpose="Explain the role and core logic of this new file">
         </create>
-        <delete>
-          </delete>
+        <delete path="src/path/to/obsolete/file.ext">Reason for deletion</delete>
       </files>
 
       <feature-inventory>
-        </feature-inventory>
+        Bullet list or repeated &lt;feature&gt; elements describing each deliverable.
+      </feature-inventory>
 
       <flow-design>
-        <design-principles>
-          </design-principles>
+        <!-- Use id attributes on principles so implementation-instructions steps can reference them -->
+        <principles>
+          <principle id="p1">First design principle.</principle>
+          <principle id="p2">Second design principle.</principle>
+        </principles>
         <steps>
-          </steps>
+          Numbered plain-text steps describing the high-level flow.
+        </steps>
       </flow-design>
 
       <technical-requirements>
@@ -56,13 +72,27 @@
         <security></security>
       </technical-requirements>
 
+      <!-- REQUIRED: list every category of change that is explicitly out of scope.
+           If the user did not supply rules, infer sensible defaults from current-state. -->
+      <do-not>
+        <rule>Do NOT modify files not listed in &lt;files&gt;.</rule>
+        <rule>Do NOT add new runtime dependencies without explicit approval.</rule>
+        <!-- add domain-specific rules here -->
+      </do-not>
+
+      <!-- REQUIRED: numbered, testable acceptance checks.
+           Each check must be verifiable by running a command or inspecting output. -->
+      <acceptance-criteria>
+        <check id="1">npm run build passes with zero TypeScript errors.</check>
+        <check id="2">All existing tests pass: npm test.</check>
+        <!-- add feature-specific checks here -->
+      </acceptance-criteria>
+
       <implementation-instructions>
-        <order>
-          <step>1. ...</step>
-        </order>
-        <do-not>
-          <rule>...</rule>
-        </do-not>
+        <!-- depends-on="N" names the step number(s) that must complete before this one -->
+        <step number="1">First implementation step.</step>
+        <step number="2" depends-on="1">Second step, depends on step 1.</step>
+        <step number="3" depends-on="1,2">Third step, depends on steps 1 and 2.</step>
       </implementation-instructions>
     </ROOT-ELEMENT>
   </expected-output-schema>
