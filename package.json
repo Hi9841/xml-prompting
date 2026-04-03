@@ -1,6 +1,6 @@
 {
   "name": "xml-prompting",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "CLI that bundles your codebase with an XML meta-prompt for AI planning (Claude, ChatGPT, etc.).",
   "main": "index.js",
   "bin": {
